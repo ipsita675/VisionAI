@@ -3,9 +3,7 @@ import logging
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.services.captioner import generate_caption
-from app.services.detector import detect_objects
-from app.services.vqa import answer_question
+from app.schemas.analysis import AnalysisResponse, VQAResponse
 from app.utils.image_utils import validate_and_load_image
 from app.utils.timer import Timer
 
@@ -21,6 +19,10 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="VisionAI API",
@@ -64,7 +66,10 @@ async def health_check():
 # Image analysis
 # ---------------------------------------------------------------------------
 
-@app.post("/api/analyze")
+@app.post(
+    "/api/analyze",
+    response_model=AnalysisResponse,
+)
 async def analyze_image(file: UploadFile = File(...)):
     """
     Analyze an uploaded image using:
@@ -73,19 +78,40 @@ async def analyze_image(file: UploadFile = File(...)):
     """
 
     try:
+        from app.services.captioner import generate_caption
+        from app.services.detector import detect_objects
+
         with Timer() as request_timer:
 
-            # Image validation and loading
-            with Timer() as validation_timer:
-                image = await validate_and_load_image(file)
+            try:
+                with Timer() as validation_timer:
+                    image = await validate_and_load_image(file)
 
-            # BLIP captioning
-            with Timer() as caption_timer:
-                caption = generate_caption(image)
+            except Exception:
+                logger.exception(
+                    "ANALYZE | image validation failed"
+                )
+                raise
 
-            # YOLO object detection
-            with Timer() as detection_timer:
-                detections = detect_objects(image)
+            try:
+                with Timer() as caption_timer:
+                    caption = generate_caption(image)
+
+            except Exception:
+                logger.exception(
+                    "ANALYZE | captioning failed"
+                )
+                raise
+
+            try:
+                with Timer() as detection_timer:
+                    detections = detect_objects(image)
+
+            except Exception:
+                logger.exception(
+                    "ANALYZE | object detection failed"
+                )
+                raise
 
         logger.info(
             "ANALYZE | validation=%.2fms | caption=%.2fms | "
@@ -111,7 +137,10 @@ async def analyze_image(file: UploadFile = File(...)):
         raise
 
     except Exception as exc:
-        logger.exception("Image analysis failed")
+        logger.exception(
+            "ANALYZE | request failed | filename=%s",
+            file.filename,
+        )
 
         raise HTTPException(
             status_code=500,
@@ -123,7 +152,10 @@ async def analyze_image(file: UploadFile = File(...)):
 # Visual question answering
 # ---------------------------------------------------------------------------
 
-@app.post("/api/ask")
+@app.post(
+    "/api/ask",
+    response_model=VQAResponse,
+)
 async def ask_question(
     file: UploadFile = File(...),
     question: str = Form(""),
@@ -140,6 +172,8 @@ async def ask_question(
         )
 
     try:
+        from app.services.vqa import answer_question
+
         image = await validate_and_load_image(file)
 
         with Timer() as vqa_timer:
