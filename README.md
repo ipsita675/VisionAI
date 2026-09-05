@@ -1,53 +1,69 @@
 # VisionAI
 
-A multimodal image analysis platform that combines image captioning, object detection, and visual question answering in a single web application.
+AI-powered image analysis application combining **image captioning, object detection, visual question answering, and accessibility-focused narration** in a full-stack web application.
 
-## Overview
+## Features
 
-VisionAI allows users to upload an image and receive multiple forms of AI-powered analysis:
+* Upload JPG, PNG, and WebP images
+* Drag-and-drop image upload
+* AI-generated image captions using **BLIP-large**
+* Object detection using **YOLO26m**
+* Detection confidence scores and bounding boxes
+* Toggle between original image and detection view
+* Hover synchronization between detected objects and bounding boxes
+* Visual Question Answering using **BLIP VQA**
+* Context-aware suggested questions based on detected objects
+* Accessibility mode with automatic narration
+* Browser-based text-to-speech using SpeechSynthesis
+* Request validation and file-size limits
+* Structured API responses using Pydantic
+* Graceful error handling
+* Stage-level backend logging
+* Cold-start and warm-inference performance measurement
+* Automated API tests with mocked model inference
+* Dockerized FastAPI API service
 
-* **Image Captioning** — generates a natural-language description of the image using BLIP-large.
-* **Object Detection** — detects objects, confidence scores, and bounding boxes using YOLO26m.
-* **Visual Question Answering** — answers natural-language questions about the uploaded image using a BLIP VQA model.
-* **Accessibility Mode** — provides read-aloud support for generated descriptions and answers.
-* **Interactive Visualization** — displays detected objects with bounding boxes and supports switching between the original and annotated image.
-
-The application is designed as a full-stack inference system with a Next.js frontend and FastAPI backend.
+---
 
 ## Architecture
 
 ```text
-┌──────────────────────┐
-│      Next.js UI      │
-│                      │
-│  Upload / Results    │
-│  Detection Viewer    │
-│  VQA / Accessibility│
-└──────────┬───────────┘
-           │ HTTP
-           ▼
-┌──────────────────────┐
-│      FastAPI API     │
-│                      │
-│  Image Validation    │
-│  Request Handling    │
-│  Error Handling      │
-│  Performance Logging │
-└───────┬──────┬───────┘
-        │      │
-        ▼      ▼
-   ┌────────┐ ┌────────┐
-   │  BLIP  │ │ YOLO26m│
-   │Caption │ │Detection│
-   └────────┘ └────────┘
-        │
-        ▼
-   ┌──────────────┐
-   │   BLIP VQA   │
-   │   Question   │
-   │   Answering  │
-   └──────────────┘
+                        ┌──────────────────────┐
+                        │      Next.js UI      │
+                        │                      │
+                        │  Upload              │
+                        │  Image Viewer        │
+                        │  Detection Overlay   │
+                        │  VQA                 │
+                        │  Accessibility       │
+                        └──────────┬───────────┘
+                                   │
+                              HTTP / REST
+                                   │
+                                   ▼
+                        ┌──────────────────────┐
+                        │      FastAPI         │
+                        │                      │
+                        │  /health             │
+                        │  /api/analyze        │
+                        │  /api/ask            │
+                        │                      │
+                        │  Validation          │
+                        │  Pydantic schemas    │
+                        │  Error handling      │
+                        │  Logging             │
+                        │  Timing              │
+                        └──────────┬───────────┘
+                                   │
+                    ┌──────────────┼──────────────┐
+                    │              │              │
+                    ▼              ▼              ▼
+               BLIP-large      YOLO26m       BLIP VQA
+              Captioning      Detection       Question
+                                                Answering
 ```
+
+---
 
 ## Tech Stack
 
@@ -57,261 +73,373 @@ The application is designed as a full-stack inference system with a Next.js fron
 * React
 * TypeScript
 * CSS
+* Browser SpeechSynthesis API
 
 ### Backend
 
-* FastAPI
 * Python
+* FastAPI
+* Pydantic
 * Uvicorn
 * Pillow
 
 ### Machine Learning
 
-* Salesforce BLIP-large — image captioning
-* YOLO26m — object detection
-* BLIP VQA — visual question answering
 * PyTorch
 * Hugging Face Transformers
-* Ultralytics
+* BLIP-large for image captioning
+* BLIP VQA for visual question answering
+* Ultralytics YOLO26m for object detection
 
 ### Testing
 
 * Pytest
 * FastAPI TestClient
-* HTTPX
+* Mocked model inference
 
-## Features
+### Deployment / Infrastructure
 
-### Image Upload
+* Docker
+* Docker Compose
 
-Supports:
+---
 
-* JPEG
-* PNG
-* WebP
+## Backend Structure
 
-Uploaded images are validated before inference, including:
+```text
+backend/
+├── Dockerfile
+├── .dockerignore
+├── requirements.txt
+├── requirements.docker.txt
+├── pytest.ini
+├── app/
+│   ├── main.py
+│   ├── schemas/
+│   │   └── analysis.py
+│   ├── services/
+│   │   ├── captioner.py
+│   │   ├── detector.py
+│   │   └── vqa.py
+│   └── utils/
+│       ├── image_utils.py
+│       └── timer.py
+└── tests/
+    └── test_api.py
+```
 
-* MIME type validation
-* Empty-file detection
-* Maximum file size validation
-* Image-content validation
+### Model lifecycle
 
-Maximum upload size: **10 MB**
+The ML services use lazy-loaded singleton-style model instances.
 
-### Image Captioning
+Models are loaded only when the corresponding functionality is first requested and are then reused for subsequent requests.
 
-BLIP-large generates a natural-language description of the uploaded image.
+This avoids repeatedly loading large models into memory and significantly reduces warm-request latency.
 
-### Object Detection
-
-YOLO26m identifies objects and returns:
-
-* Object label
-* Confidence score
-* Bounding box coordinates
-
-The frontend visualizes these detections directly on the image.
-
-### Visual Question Answering
-
-Users can ask questions about the uploaded image and receive model-generated answers.
-
-The interface also generates contextual example questions based on detected objects.
-
-### Accessibility
-
-Accessibility mode provides:
-
-* Read-aloud support using browser speech synthesis
-* Narration of generated scene descriptions
-* Read-aloud support for VQA answers
+---
 
 ## API
 
-### Health Check
+### `GET /health`
 
-```http
-GET /health
+Lightweight health-check endpoint.
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "service": "VisionAI API"
+}
 ```
 
-Returns the API health status.
+The endpoint does not require ML dependencies to be initialized.
 
-### Image Analysis
+---
 
-```http
-POST /api/analyze
+### `POST /api/analyze`
+
+Accepts an image and performs:
+
+1. Image validation
+2. BLIP image captioning
+3. YOLO object detection
+4. Timing and structured logging
+
+Example response structure:
+
+```json
+{
+  "success": true,
+  "filename": "image.jpg",
+  "image": {
+    "width": 1920,
+    "height": 1080
+  },
+  "caption": "A person standing outdoors.",
+  "detections": [
+    {
+      "label": "person",
+      "confidence": 0.95,
+      "box": {
+        "x1": 120.5,
+        "y1": 80.2,
+        "x2": 640.1,
+        "y2": 920.4
+      }
+    }
+  ]
+}
 ```
 
-Accepts an image upload and returns:
+---
 
-* Image dimensions
-* Generated caption
-* Object detections
-* Confidence scores
-* Bounding boxes
+### `POST /api/ask`
 
-### Visual Question Answering
+Accepts an image and natural-language question.
 
-```http
-POST /api/ask
-```
+Uses BLIP VQA to answer questions about the image.
 
-Accepts:
-
-* Image upload
-* Natural-language question
-
-Returns the generated answer.
-
-## Project Structure
+Example:
 
 ```text
-VisionAI/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── services/
-│   │   │   ├── captioner.py
-│   │   │   ├── detector.py
-│   │   │   └── vqa.py
-│   │   └── utils/
-│   │       ├── image_utils.py
-│   │       └── timer.py
-│   ├── tests/
-│   │   └── test_api.py
-│   ├── requirements.txt
-│   └── pytest.ini
-│
-├── frontend/
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── Header.tsx
-│   │   ├── UploadCard.tsx
-│   │   ├── ImageViewer.tsx
-│   │   ├── VQASection.tsx
-│   │   └── Footer.tsx
-│   ├── package.json
-│   └── ...
-│
-├── .gitignore
-└── README.md
+Question:
+How many people are in the image?
+
+Answer:
+There are two people.
 ```
 
-## Local Development
+---
 
-### 1. Clone the repository
+## Request Safety
 
-```bash
-git clone https://github.com/ipsita675/VisionAI.git
-cd VisionAI
-```
+Uploaded images are validated before inference.
 
-### 2. Backend
+The backend checks:
 
-Create and activate a virtual environment:
+* MIME type
+* Empty uploads
+* Maximum file size
+* Actual image validity
+* Image decoding
+* RGB conversion
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start the API:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The backend runs on:
+Supported formats:
 
 ```text
-http://localhost:8000
+JPEG
+PNG
+WebP
 ```
 
-### 3. Frontend
-
-In a separate terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend runs on:
+Maximum upload size:
 
 ```text
-http://localhost:3000
+10 MB
 ```
+
+Invalid requests receive appropriate HTTP error responses rather than reaching the ML inference layer.
+
+---
+
+## Error Handling
+
+The backend separates failures by processing stage.
+
+For `/api/analyze`:
+
+```text
+Upload
+  ↓
+Validation
+  ↓
+Captioning
+  ↓
+Object Detection
+  ↓
+Response
+```
+
+Failures are logged with their corresponding stage.
+
+The API exposes safe user-facing error messages while retaining detailed exception information in server logs.
+
+---
+
+## Performance Benchmark
+
+Measured on the development machine.
+
+| Metric             | Cold Request | Warm Request |
+| ------------------ | -----------: | -----------: |
+| Total request      |     11.947 s |      2.252 s |
+| BLIP captioning    |     11.382 s |      1.934 s |
+| YOLO detection     |      0.514 s |      0.308 s |
+| Validation         |      0.051 s |      0.010 s |
+| BLIP model loading |      8.602 s |            — |
+| YOLO model loading |      0.185 s |            — |
+
+The measurements demonstrate the impact of model initialization and the benefit of reusing loaded models across requests.
+
+BLIP captioning is the dominant warm-request bottleneck, accounting for roughly 86% of the warm `/api/analyze` latency.
+
+---
 
 ## Testing
 
-Backend API tests can be run with:
+The backend currently contains **9 automated API tests** covering:
+
+* Health endpoint
+* Unsupported file types
+* Empty uploads
+* Empty VQA questions
+* Successful image analysis
+* Captioning failure handling
+* Object detection failure handling
+* Successful VQA
+* VQA inference failure handling
+
+Model inference is mocked during API tests, allowing the test suite to run without downloading or loading the large ML models.
+
+Run tests with:
 
 ```bash
 cd backend
 pytest
 ```
 
-The test suite covers:
+Expected result:
 
-* Health endpoint
-* Invalid file types
-* Empty uploads
-* Invalid VQA requests
-* Successful analysis response structure
+```text
+9 passed
+```
 
-## Model Weights
+---
 
-Large model files are intentionally excluded from Git.
+## Docker
 
-The YOLO26m weights file is ignored through `.gitignore` and should be made available locally during setup.
+The FastAPI API layer can be run inside Docker using Docker Compose.
 
-BLIP model weights are loaded through Hugging Face Transformers when the application initializes the models.
+Build:
 
-## Engineering Considerations
+```bash
+docker compose build
+```
 
-VisionAI includes several production-oriented considerations beyond basic model inference:
+Start:
 
-* Centralized image validation
-* Explicit upload-size limits
-* MIME-type validation
-* Lazy model loading
-* Device-aware PyTorch inference
-* Inference timing instrumentation
-* Structured application logging
-* Graceful API error handling
-* Automated API tests
-* Separation of API, service, and utility layers
-* Frontend loading and error states
+```bash
+docker compose up
+```
+
+Health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Docker design
+
+The Docker image intentionally uses a lightweight dependency set.
+
+The current containerization milestone covers the **FastAPI API service and its application lifecycle**, while the heavyweight ML inference stack remains configured for local execution.
+
+This avoids unnecessarily large container images containing PyTorch, Transformers, and model dependencies while still demonstrating containerized backend deployment.
+
+---
+
+## Accessibility
+
+VisionAI includes an accessibility-oriented mode designed to make image analysis easier to consume without continuously reading the interface.
+
+Accessibility mode can:
+
+* Narrate the generated scene description
+* Read analysis results aloud
+* Read VQA answers using browser text-to-speech
+
+The application uses the browser's native `SpeechSynthesis` API rather than requiring a separate speech service.
+
+---
+
+## Project Structure
+
+```text
+VisionAI/
+│
+├── README.md
+├── .gitignore
+├── docker-compose.yml
+│
+├── backend/
+│   ├── Dockerfile
+│   ├── .dockerignore
+│   ├── requirements.txt
+│   ├── requirements.docker.txt
+│   ├── pytest.ini
+│   ├── yolo26m.pt
+│   │
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   └── analysis.py
+│   │   │
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── captioner.py
+│   │   │   ├── detector.py
+│   │   │   └── vqa.py
+│   │   │
+│   │   └── utils/
+│   │       ├── image_utils.py
+│   │       └── timer.py
+│   │
+│   └── tests/
+│       └── test_api.py
+│
+└── frontend/
+    ├── app/
+    │   ├── globals.css
+    │   ├── layout.tsx
+    │   └── page.tsx
+    │
+    ├── components/
+    │   ├── Header.tsx
+    │   ├── ImageViewer.tsx
+    │   ├── UploadCard.tsx
+    │   ├── VQASection.tsx
+    │   └── Footer.tsx
+    │
+    └── package.json
+```
+
+---
 
 ## Future Improvements
 
-Potential extensions include:
+Potential future engineering improvements include:
 
-* Asynchronous inference workers for heavier workloads
-* Model caching and lifecycle management
-* Persistent analysis history
-* GPU-backed deployment
-* Containerized deployment
-* Additional vision models and analysis tasks
+* Content-hash based inference caching
+* Background inference jobs
+* Job-status APIs for long-running inference
+* Concurrent inference benchmarking
+* Production model serving infrastructure
+* GPU-enabled container deployment
+
+These are intentionally outside the current scope of the project.
+
+---
 
 ## Author
 
 **Ipsita Pandey**
 
-Electrical Engineering, IIT Ropar
+GitHub: https://github.com/ipsita675
 
-* GitHub: https://github.com/ipsita675
-* LinkedIn: https://www.linkedin.com/in/ipsitapandey/
-* Email: [msipsitapandey@gmail.com](mailto:msipsitapandey@gmail.com)
+LinkedIn: https://www.linkedin.com/in/ipsitapandey/
+
+Email: [msipsitapandey@gmail.com](mailto:msipsitapandey@gmail.com)
